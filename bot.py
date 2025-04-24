@@ -4,6 +4,11 @@ from aiohttp import web
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
+# Настройка логирования (ДО использования logger)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Читаем переменные окружения
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -15,12 +20,7 @@ if not TOKEN or not WEBHOOK_URL:
 # Создаем бота и приложение
 bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
-logger.info("Application initialized successfully")
-
-# Логирование
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger.info("Application initialized successfully")  # Теперь logger определён
 
 # Обработчик команд
 async def start(update: Update, context):
@@ -38,7 +38,7 @@ async def on_update(request):
     logger.info(f"Received update: {json_str}")
     update = Update.de_json(json_str, bot)
     if update:
-        await application.process_update(update)
+        await application.process_update(update)  # Исправлено с await
         logger.info("Update processed successfully")
     else:
         logger.warning("Failed to parse update")
