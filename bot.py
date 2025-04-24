@@ -2,11 +2,10 @@ import os
 import logging
 from aiohttp import web
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
-from telegram.ext import Application
+from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler
 
-TOKEN = os.getenv("BOT_TOKEN")  # Добавьте свой токен через переменную окружения
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # URL для вебхука (например, https://your-app-name.onrender.com/)
+TOKEN = os.getenv("BOT_TOKEN")  # Берем токен из переменной окружения
+WEBHOOK_URL = f"https://{os.getenv('RENDER_URL')}/{TOKEN}"  # Используем динамическую ссылку
 
 bot = Bot(token=TOKEN)
 
@@ -22,28 +21,29 @@ async def start(update: Update, context):
 # Обработчик кнопок
 async def button(update: Update, context):
     query = update.callback_query
-    await query.answer()  # Это подтверждение, чтобы кнопка не блокировалась
-    # Логика нажатия на кнопку
+    await query.answer()  # Ответ на нажатие кнопки
     await query.edit_message_text(text="Вы нажали кнопку!")
 
 # Вебхук для получения обновлений
 async def on_update(request):
-    json_str = await request.json()
+    json_str = await request.json()  # Получаем запрос от Telegram
     update = Update.de_json(json_str, bot)
-    dispatcher.process_update(update)
-    return web.Response()
+    dispatcher.process_update(update)  # Передаем в dispatcher
+    return web.Response()  # Возвращаем ответ
 
-# Создаём диспетчер и добавляем обработчики
+# Создаем диспетчер и добавляем обработчики
 dispatcher = Dispatcher(bot, update_queue=None)
-
-# Добавляем обработчики команд и кнопок
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CallbackQueryHandler(button))
+
+# Устанавливаем вебхук для Telegram
+bot.set_webhook(url=WEBHOOK_URL)
 
 # Создаем веб-сервер с aiohttp
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", on_update)
 
-# Запускаем веб-приложение на порту 8080
+# Запускаем веб-приложение
 if __name__ == "__main__":
-    web.run_app(app, host="0.0.0.0", port=8080)
+    port = int(os.environ.get("PORT", 8080))  # Порт на Render
+    web.run_app(app, host="0.0.0.0", port=port)
