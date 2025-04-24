@@ -25,8 +25,7 @@ logger.info("Application created successfully")
 # Инициализация приложения
 async def init_application():
     await application.initialize()  # Инициализация Application
-    await application.start()       # Запуск Application
-    logger.info("Application initialized and started successfully")
+    logger.info("Application initialized successfully")
 
 # Обработчик команд
 async def start(update: Update, context):
@@ -60,15 +59,25 @@ async def set_webhook():
     await bot.set_webhook(url=webhook_url)
     logger.info(f"Webhook set to {webhook_url}")
 
-# Инициализация и установка вебхука
-if WEBHOOK_URL:
-    import asyncio
-    asyncio.run(init_application())  # Инициализируем приложение
-    asyncio.run(set_webhook())       # Устанавливаем вебхук
+# Остановка приложения
+async def stop_application():
+    await application.stop()
+    logger.info("Application stopped successfully")
 
 # Создаем веб-сервер
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", on_update)
+
+# Добавляем обработку запуска и остановки сервера
+async def on_startup(_):
+    await init_application()
+    await set_webhook()
+
+async def on_shutdown(_):
+    await stop_application()
+
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
 
 # Запускаем приложение
 if __name__ == "__main__":
