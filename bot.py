@@ -41,23 +41,21 @@ async def button(update: Update, context):
 
 # Вебхук для получения обновлений
 async def on_update(request):
-    try:
-        json_str = await request.json()
-        logger.info(f"Received update: {json_str}")
-        update = Update.de_json(json_str, bot)
-        if update:
-            logger.info(f"Update object: {update}")
-            await application.process_update(update)
-            logger.info("Update processed successfully")
-        else:
-            logger.warning("Failed to parse update")
-    except Exception as e:
-        logger.error(f"Error processing request: {e}")
+    json_str = await request.json()
+    logger.info(f"Received update: {json_str}")
+    update = Update.de_json(json_str, bot)
+    if update:
+        logger.info(f"Update object: {update}")
+        await application.process_update(update)
+        logger.info("Update processed successfully")
+    else:
+        logger.warning("Failed to parse update")
     return web.Response()
-  
+
+# Эндпоинт для проверки состояния сервера
 async def health_check(request):
+    logger.info("Health check requested")
     return web.Response(text="Server is running")
-app.router.add_get("/health", health_check)
 
 # Добавляем обработчики
 application.add_handler(CommandHandler("start", start))
@@ -78,6 +76,7 @@ async def stop_application():
 # Создаем веб-сервер
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", on_update)
+app.router.add_get("/health", health_check)  # Маршрут для /health добавлен ПОСЛЕ создания app
 
 # Добавляем обработку запуска и остановки сервера
 async def on_startup(_):
