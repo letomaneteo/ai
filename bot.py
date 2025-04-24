@@ -22,13 +22,15 @@ bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
 logger.info("Application created successfully")
 
-# Инициализация приложения
+# Инициализация приложения и бота
 async def init_application():
+    await bot.initialize()          # Инициализация Bot
     await application.initialize()  # Инициализация Application
-    logger.info("Application initialized successfully")
+    logger.info("Bot and Application initialized successfully")
 
 # Обработчик команд
 async def start(update: Update, context):
+    logger.info("Processing /start command")
     await update.message.reply_text("Привет! Я бот.")
 
 # Обработчик кнопок
@@ -43,6 +45,7 @@ async def on_update(request):
     logger.info(f"Received update: {json_str}")
     update = Update.de_json(json_str, bot)
     if update:
+        logger.info(f"Update object: {update}")
         await application.process_update(update)
         logger.info("Update processed successfully")
     else:
@@ -59,10 +62,11 @@ async def set_webhook():
     await bot.set_webhook(url=webhook_url)
     logger.info(f"Webhook set to {webhook_url}")
 
-# Остановка приложения
+# Остановка приложения и бота
 async def stop_application():
     await application.stop()
-    logger.info("Application stopped successfully")
+    await bot.stop()
+    logger.info("Application and Bot stopped successfully")
 
 # Создаем веб-сервер
 app = web.Application()
