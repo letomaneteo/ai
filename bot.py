@@ -39,6 +39,7 @@ async def on_update(request):
     update = Update.de_json(json_str, bot)
     if update:
         await application.process_update(update)
+        logger.info("Update processed successfully")
     else:
         logger.warning("Failed to parse update")
     return web.Response()
