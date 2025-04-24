@@ -4,7 +4,7 @@ from aiohttp import web
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
-# Настройка логирования (ДО использования logger)
+# Настройка логирования
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,7 +20,13 @@ if not TOKEN or not WEBHOOK_URL:
 # Создаем бота и приложение
 bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
-logger.info("Application initialized successfully")  # Теперь logger определён
+logger.info("Application created successfully")
+
+# Инициализация приложения
+async def init_application():
+    await application.initialize()  # Инициализация Application
+    await application.start()       # Запуск Application
+    logger.info("Application initialized and started successfully")
 
 # Обработчик команд
 async def start(update: Update, context):
@@ -38,7 +44,7 @@ async def on_update(request):
     logger.info(f"Received update: {json_str}")
     update = Update.de_json(json_str, bot)
     if update:
-        await application.process_update(update)  # Исправлено с await
+        await application.process_update(update)
         logger.info("Update processed successfully")
     else:
         logger.warning("Failed to parse update")
@@ -54,9 +60,11 @@ async def set_webhook():
     await bot.set_webhook(url=webhook_url)
     logger.info(f"Webhook set to {webhook_url}")
 
+# Инициализация и установка вебхука
 if WEBHOOK_URL:
     import asyncio
-    asyncio.run(set_webhook())
+    asyncio.run(init_application())  # Инициализируем приложение
+    asyncio.run(set_webhook())       # Устанавливаем вебхук
 
 # Создаем веб-сервер
 app = web.Application()
