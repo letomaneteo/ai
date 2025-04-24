@@ -5,7 +5,7 @@ from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler
 
 TOKEN = os.getenv("BOT_TOKEN")  # Берем токен из переменной окружения
-WEBHOOK_URL = f"https://{os.getenv('RENDER_URL')}/{TOKEN}"  # Используем динамическую ссылку
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Убедись, что добавил URL в переменные окружения Render
 
 bot = Bot(token=TOKEN)
 
@@ -37,7 +37,7 @@ dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CallbackQueryHandler(button))
 
 # Устанавливаем вебхук для Telegram
-bot.set_webhook(url=WEBHOOK_URL)
+bot.set_webhook(url=WEBHOOK_URL)  # Убедись, что передаешь правильный URL
 
 # Создаем веб-сервер с aiohttp
 app = web.Application()
