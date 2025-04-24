@@ -2,12 +2,15 @@ import os
 import logging
 from aiohttp import web
 from telegram import Bot, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
-TOKEN = os.getenv("BOT_TOKEN")  # Берем токен из переменной окружения
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Убедись, что добавил URL в переменные окружения Render
+# Читаем переменные окружения
+TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из переменной окружения
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # URL вебхука из переменной окружения
 
+# Создаем бота и приложение
 bot = Bot(token=TOKEN)
+application = Application.builder().token(TOKEN).build()
 
 # Логирование
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,16 +31,16 @@ async def button(update: Update, context):
 async def on_update(request):
     json_str = await request.json()  # Получаем запрос от Telegram
     update = Update.de_json(json_str, bot)
-    dispatcher.process_update(update)  # Передаем в dispatcher
+    application.process_update(update)  # Передаем в application
     return web.Response()  # Возвращаем ответ
 
-# Создаем диспетчер и добавляем обработчики
-dispatcher = Dispatcher(bot, update_queue=None)
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CallbackQueryHandler(button))
+# Добавляем обработчики команд и кнопок
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button))
 
 # Устанавливаем вебхук для Telegram
-bot.set_webhook(url=WEBHOOK_URL)  # Убедись, что передаешь правильный URL
+if WEBHOOK_URL:
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")  # Устанавливаем вебхук
 
 # Создаем веб-сервер с aiohttp
 app = web.Application()
@@ -47,3 +50,4 @@ app.router.add_post(f"/{TOKEN}", on_update)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))  # Порт на Render
     web.run_app(app, host="0.0.0.0", port=port)
+
