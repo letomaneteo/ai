@@ -8,6 +8,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из переменной окружения
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # URL вебхука из переменной окружения
 
+# Проверим, что переменные окружения установлены
+if not TOKEN or not WEBHOOK_URL:
+    raise ValueError("Необходимо указать переменные окружения BOT_TOKEN и WEBHOOK_URL!")
+
 # Создаем бота и приложение
 bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
@@ -40,7 +44,8 @@ application.add_handler(CallbackQueryHandler(button))
 
 # Устанавливаем вебхук для Telegram
 if WEBHOOK_URL:
-    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")  # Устанавливаем вебхук
+    webhook_url = f"{WEBHOOK_URL}/{TOKEN}"
+    bot.set_webhook(url=webhook_url)  # Устанавливаем вебхук
 
 # Создаем веб-сервер с aiohttp
 app = web.Application()
@@ -50,4 +55,5 @@ app.router.add_post(f"/{TOKEN}", on_update)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))  # Порт на Render
     web.run_app(app, host="0.0.0.0", port=port)
+
 
