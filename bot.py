@@ -5,16 +5,17 @@ from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
 # Читаем переменные окружения
-TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из переменной окружения
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # URL вебхука из переменной окружения
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Проверим, что переменные окружения установлены
+# Проверка переменных окружения
 if not TOKEN or not WEBHOOK_URL:
     raise ValueError("Необходимо указать переменные окружения BOT_TOKEN и WEBHOOK_URL!")
 
 # Создаем бота и приложение
 bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
+logger.info("Application initialized successfully")
 
 # Логирование
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,32 +29,39 @@ async def start(update: Update, context):
 # Обработчик кнопок
 async def button(update: Update, context):
     query = update.callback_query
-    await query.answer()  # Ответ на нажатие кнопки
+    await query.answer()
     await query.edit_message_text(text="Вы нажали кнопку!")
 
 # Вебхук для получения обновлений
 async def on_update(request):
-    json_str = await request.json()  # Получаем запрос от Telegram
+    json_str = await request.json()
+    logger.info(f"Received update: {json_str}")
     update = Update.de_json(json_str, bot)
-    application.process_update(update)  # Передаем в application
-    return web.Response()  # Возвращаем ответ
+    if update:
+        await application.process_update(update)
+    else:
+        logger.warning("Failed to parse update")
+    return web.Response()
 
-# Добавляем обработчики команд и кнопок
+# Добавляем обработчики
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button))
 
-# Устанавливаем вебхук для Telegram
-if WEBHOOK_URL:
+# Устанавливаем вебхук
+async def set_webhook():
     webhook_url = f"{WEBHOOK_URL}/{TOKEN}"
-    bot.set_webhook(url=webhook_url)  # Устанавливаем вебхук
+    await bot.set_webhook(url=webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
 
-# Создаем веб-сервер с aiohttp
+if WEBHOOK_URL:
+    import asyncio
+    asyncio.run(set_webhook())
+
+# Создаем веб-сервер
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", on_update)
 
-# Запускаем веб-приложение
+# Запускаем приложение
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # Порт на Render
+    port = int(os.environ.get("PORT", 8080))
     web.run_app(app, host="0.0.0.0", port=port)
-
-
