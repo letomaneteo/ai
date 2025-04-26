@@ -14,7 +14,8 @@ from telegram.ext import ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 import json
-
+import cloudinary
+import cloudinary.uploader
 # Логирование
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +40,13 @@ def update_image_clicks(image_url):
     ref.set({"clicks": clicks + 1})
 
 ADMIN_ID = 6932848487  # замени на свой Telegram user_id
+
+# Инициализация Cloudinary
+cloudinary.config(
+  cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+  api_key = os.getenv("CLOUDINARY_API_KEY"),
+  api_secret = os.getenv("CLOUDINARY_API_SECRET")
+)
 
 async def send_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -356,6 +364,9 @@ You did it {total} elections.
 
     await context.bot.send_message(chat_id, result_text, parse_mode="Markdown", reply_markup=reply_markup)
 
+import cloudinary.uploader
+import datetime
+
 async def handle_media(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     ref = db.reference(f"user_uploads/{user_id}")
@@ -370,40 +381,53 @@ async def handle_media(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("You have already uploaded 7 files. Further uploads are unavailable.")
         return
 
-    caption = update.message.caption or ""  # Получаем подпись
+    caption = update.message.caption or ""
     if update.message.photo:
         file = update.message.photo[-1].file_id
-        file_ext = "jpg"
+        resource_type = "image"
     elif update.message.video:
         file = update.message.video.file_id
-        file_ext = "mp4"
+        resource_type = "video"
     elif update.message.document:
         file = update.message.document.file_id
-        file_ext = update.message.document.file_name.split('.')[-1] if '.' in update.message.document.file_name else 'unknown'
+        resource_type = "auto"
     else:
         await update.message.reply_text("I only accept photos, videos and documents.")
         return
 
-    file_obj = await context.bot.get_file(file)
-    file_path = f"media/{user_id}_{user_data['count'] + 1}.{file_ext}"
-
-    os.makedirs("media", exist_ok=True)
     try:
-        await file_obj.download_to_drive(file_path)
-    except Exception:
-        await update.message.reply_text("Error saving file.")
-        return
+        file_obj = await context.bot.get_file(file)
+        file_url = file_obj.file_path
 
-    # Сохраняем информацию о файле и подпись в Firebase
-    ref.child(f"files/{user_data['count'] + 1}").set({
-        "file_path": file_path,
-        "caption": caption
-    })
-    ref.update({"count": user_data["count"] + 1})
-    reply_text = f"Thank you! File saved. ({user_data['count'] + 1}/7)."
-    if caption:
-        reply_text += f"\nПодпись: {caption}"
-    await update.message.reply_text(reply_text)
+        # Создаем уникальный public_id с user_id и датой
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        public_id = f"{user_id}_{timestamp}"
+
+        # Загружаем напрямую в Cloudinary по URL
+        upload_result = cloudinary.uploader.upload(
+            file_url,
+            resource_type=resource_type,
+            folder=f"user_uploads/{user_id}",
+            public_id=public_id
+        )
+
+        # Сохраняем информацию о файле и подпись в Firebase
+        ref.child(f"files/{user_data['count'] + 1}").set({
+            "cloudinary_url": upload_result["secure_url"],
+            "caption": caption,
+            "public_id": public_id,
+            "upload_time": timestamp
+        })
+        ref.update({"count": user_data["count"] + 1})
+
+        reply_text = f"Thank you! File saved. ({user_data['count'] + 1}/7)."
+        if caption:
+            reply_text += f"\nПодпись: {caption}"
+        await update.message.reply_text(reply_text)
+
+    except Exception as e:
+        print(e)
+        await update.message.reply_text("Error uploading file.")
 # === Импорты твоих функций из старого файла ===
 # (сюда вставим start, button, menu, send_to_user, handle_media, и все вспомогательные)
 
