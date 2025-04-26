@@ -6,11 +6,7 @@ import firebase_admin
 from firebase_admin import credentials, db
 from aiohttp import web
 import asyncio
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, CallbackContext
-import firebase_admin
-from firebase_admin import credentials, db
 from telegram.ext import MessageHandler, filters
 from telegram import ReplyKeyboardMarkup, KeyboardButton
 from telegram import Update
