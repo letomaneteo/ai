@@ -77,13 +77,21 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Настройка Firebase
+
 import json
 
-cred_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+firebase_credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+
+if not firebase_credentials_json:
+    raise ValueError("Не найдена переменная окружения GOOGLE_APPLICATION_CREDENTIALS_JSON!")
+
+cred_info = json.loads(firebase_credentials_json)
 cred = credentials.Certificate(cred_info)
+
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://botchoiseimage-default-rtdb.europe-west1.firebasedatabase.app/'
 })
+
 
 
 def get_images_from_google_sheets(user_id, sheet_number):
