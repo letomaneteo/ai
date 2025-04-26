@@ -6,7 +6,15 @@ import firebase_admin
 from firebase_admin import credentials, db
 from aiohttp import web
 import asyncio
-
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, CallbackContext
+import firebase_admin
+from firebase_admin import credentials, db
+from telegram.ext import MessageHandler, filters
+from telegram import ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update
+from telegram.ext import ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
@@ -32,19 +40,7 @@ application = Application.builder().token(TOKEN).build()
 logger.info("Application created successfully")
 
 
-import logging
-import requests
-import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, CallbackContext
-import firebase_admin
-from firebase_admin import credentials, db
-import os
-from telegram.ext import MessageHandler, filters
-from telegram import ReplyKeyboardMarkup, KeyboardButton
-import asyncio
-from telegram import Update
-from telegram.ext import ContextTypes
+
 
 def update_image_clicks(image_url):
     # Создаём безопасный ключ, убирая или заменяя недопустимые символы
