@@ -29,17 +29,9 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 if not TOKEN or not WEBHOOK_URL:
     raise ValueError("Необходимо установить BOT_TOKEN и WEBHOOK_URL!")
 
-# Firebase инициализация
-cred = credentials.Certificate("botchoiseimage-firebase-adminsdk-fbsvc-fff457209b.json")
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://botchoiseimage-default-rtdb.europe-west1.firebasedatabase.app/'
-})
-
 # Создаём бота и приложение
 application = Application.builder().token(TOKEN).build()
 logger.info("Application created successfully")
-
-
 
 
 def update_image_clicks(image_url):
@@ -48,8 +40,6 @@ def update_image_clicks(image_url):
     ref = db.reference(f"image_clicks/{safe_key}")
     clicks = ref.get().get("clicks", 0) if ref.get() else 0
     ref.set({"clicks": clicks + 1})
-
-TOKEN = '7985113809:AAGpD5VHgXxXtdDkY2nP5iCbQg5kFkCM9tM'
 
 ADMIN_ID = 6932848487  # замени на свой Telegram user_id
 
