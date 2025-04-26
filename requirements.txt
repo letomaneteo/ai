@@ -2,4 +2,4 @@ python-telegram-bot==20.8
 aiohttp
 firebase-admin
 requests
-
+cloudinary
