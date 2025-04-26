@@ -13,6 +13,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+import json
 
 # Логирование
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -76,10 +77,14 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Настройка Firebase
-cred = credentials.Certificate("botchoiseimage-firebase-adminsdk-fbsvc-fff457209b.json")
+import json
+
+cred_info = json.loads(os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"))
+cred = credentials.Certificate(cred_info)
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://botchoiseimage-default-rtdb.europe-west1.firebasedatabase.app/'
 })
+
 
 def get_images_from_google_sheets(user_id, sheet_number):
     sheet_name = str(sheet_number).zfill(3)  # "000", "001", "002"
