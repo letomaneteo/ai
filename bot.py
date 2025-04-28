@@ -479,6 +479,7 @@ async def on_shutdown(app):
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", on_update)
 app.router.add_get("/health", health_check)
+app.router.add_get("/", health_check)
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
