@@ -192,120 +192,108 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 
 
-# Безопасная отправка фото
-async def safe_send_photo(bot, chat_id, image_url, reply_markup=None):
-    try:
-        r = requests.head(image_url, timeout=5)
-        if r.status_code != 200 or "image" not in r.headers.get("Content-Type", ""):
-            logger.warning(f"Skipping invalid image: {image_url}")
-            await bot.send_message(chat_id, f"⚠️ Image not available: {image_url}")
-            return None
-        return await bot.send_photo(chat_id=chat_id, photo=image_url, reply_markup=reply_markup)
-    except Exception as e:
-        logger.error(f"Error sending photo {image_url}: {e}")
-        await bot.send_message(chat_id, f"⚠️ Error sending image: {image_url}")
-        return None
-
-# Отправка пары изображений пользователю
-async def send_images(chat_id, context):
-    if context.user_data.get("rounds", 0) >= 10:
+async def send_images(chat_id, context: CallbackContext) -> None:
+    if context.user_data["rounds"] >= 10:
         await show_results(chat_id, context)
         return
 
-    user_id = chat_id
-    sheet_number = 0  # можно передавать динамически
-    if not context.user_data.get("current_images"):
-        context.user_data["current_images"] = get_images_from_google_sheets(user_id, sheet_number)
+    if not context.user_data["current_images"]:
+        context.user_data["current_images"] = get_images_from_google_sheets()
 
     images = context.user_data["current_images"]
-    used_images = context.user_data.setdefault("used_images", set())
 
-    correct_images = [img for img in images if img["is_correct"] == 1 and img["image_url"] not in used_images]
-    wrong_images = [img for img in images if img["is_correct"] == 0 and img["image_url"] not in used_images]
+    correct_images = [img for img in images if img["is_correct"] == 1 and img["image_url"] not in context.user_data["used_images"]]
+    wrong_images = [img for img in images if img["is_correct"] == 0 and img["image_url"] not in context.user_data["used_images"]]
 
     if not correct_images or not wrong_images:
-        await context.bot.send_message(chat_id, "🚨 Not enough images remaining. Showing results.")
+        await context.bot.send_message(chat_id, "🚨You missed a choice in this place, which reduces the number of points. Be careful!🚨")
         await show_results(chat_id, context)
         return
 
     correct_image = random.choice(correct_images)
     wrong_image = random.choice(wrong_images)
+
     image_list = [correct_image, wrong_image]
     random.shuffle(image_list)
 
-    # Сохраняем URL для последующего сохранения выбора
-    context.user_data["current_image_urls"] = [img["image_url"] for img in image_list]
-
-    # Обновляем использованные изображения
-    used_images.add(correct_image["image_url"])
-    used_images.add(wrong_image["image_url"])
+    context.user_data["used_images"].add(correct_image["image_url"])
+    context.user_data["used_images"].add(wrong_image["image_url"])
+    context.user_data["current_image_urls"] = [image_list[0]["image_url"], image_list[1]["image_url"]]
 
     keyboard1 = [[InlineKeyboardButton("Choose", callback_data=f"choose_1_{image_list[0]['is_correct']}")]]
     keyboard2 = [[InlineKeyboardButton("Choose", callback_data=f"choose_2_{image_list[1]['is_correct']}")]]
+
     reply_markup1 = InlineKeyboardMarkup(keyboard1)
     reply_markup2 = InlineKeyboardMarkup(keyboard2)
 
-    msg1 = await safe_send_photo(context.bot, chat_id, image_list[0]["image_url"], reply_markup1)
-    msg2 = await safe_send_photo(context.bot, chat_id, image_list[1]["image_url"], reply_markup2)
+    msg1 = await context.bot.send_photo(chat_id=chat_id, photo=image_list[0]["image_url"], reply_markup=reply_markup1)
+    msg2 = await context.bot.send_photo(chat_id=chat_id, photo=image_list[1]["image_url"], reply_markup=reply_markup2)
 
-    context.user_data["messages"] = [m.message_id for m in [msg1, msg2] if m]
+    context.user_data["messages"] = [msg1.message_id, msg2.message_id]
 
+    # Сбрасываем флаг "ответил" перед новой парой картинок
     context.user_data["answered"] = False
 
-    # Отменяем старый таймер
-    task = context.user_data.pop("timer_task", None)
-    if task and not task.done():
-        task.cancel()
+    # Запускаем таймер на удаление кнопок
+    if "timer_task" in context.user_data and not context.user_data["timer_task"].done():
+        context.user_data["timer_task"].cancel()  # Отменяем предыдущий таймер
 
-    context.user_data["timer_task"] = asyncio.create_task(
-        remove_buttons_after_timeout(chat_id, context, context.user_data["messages"])
-    )
+    context.user_data["timer_task"] = asyncio.create_task(remove_buttons_after_timeout(chat_id, context, [msg1.message_id, msg2.message_id]))
 
 
-# Обработчик нажатий кнопок
-async def button(update: Update, context):
+async def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    chat_id = query.message.chat.id
+    chat_id = query.message.chat_id
     user_id = query.from_user.id
     await query.answer()
 
-    # Удаляем кнопки с нажатого сообщения
+    # Удаляем кнопки из сообщения, на которое нажали (например, "Начать тест" или "Продолжить")
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except Exception as e:
         if "Message is not modified" not in str(e):
-            logger.warning(f"Cannot remove reply_markup: {e}")
+            logger.warning(f"Не удалось удалить reply_markup: {e}")
 
-    data_parts = query.data.split("_")
+    if query.data in ["start_game", "continue_game"]:
+        ref = db.reference(f"user_progress/{user_id}")
+        progress = ref.get() or {"completed_sheets": []}
 
-    # Начало или продолжение игры
-    if data_parts[0] in ["start", "continue"]:
+        max_sheets = 3  # Установи лимит листов
+        if len(progress["completed_sheets"]) >= max_sheets:
+            await show_results(chat_id, context)
+            return
+
+        # Определяем следующий номер листа (начиная с 0)
+        sheet_number = len(progress["completed_sheets"])  # 0, 1, 2
+        sheet_name = str(sheet_number).zfill(3)  # "000", "001", "002"
+
+        if sheet_name not in progress["completed_sheets"]:
+            progress["completed_sheets"].append(sheet_name)
+            ref.set(progress)
+
+        # Загружаем данные для текущего листа
+        images = get_images_from_google_sheets(user_id, sheet_number)
+
+        # Проверяем, вернул ли Apps Script сообщение о завершении
+        if isinstance(images, dict) and "message" in images:
+            await show_results(chat_id, context)
+            return
+
+        # Сбрасываем данные пользователя для нового листа
         context.user_data["rounds"] = 0
         context.user_data["correct"] = 0
         context.user_data["wrong"] = 0
         context.user_data["used_images"] = set()
+        context.user_data["current_images"] = images
+        await context.bot.send_message(chat_id, f"Let's start the set {sheet_name}")  # Отладка
         await send_images(chat_id, context)
         return
 
-    # Обработка выбора
-    if len(data_parts) != 3:
-        logger.warning(f"Unknown callback data: {query.data}")
-        return
-
-    choice = int(data_parts[1])
-    is_correct = int(data_parts[2])
-
-    # Проверяем наличие current_image_urls
-    urls = context.user_data.get("current_image_urls")
-    if urls and 0 <= choice - 1 < len(urls):
-        save_to_firebase(user_id, choice, is_correct, urls[choice - 1])
-    else:
-        logger.warning("current_image_urls missing or invalid, skipping save_to_firebase")
-
-    context.user_data["rounds"] = context.user_data.get("rounds", 0) + 1
-    context.user_data["correct"] = context.user_data.get("correct", 0) + (1 if is_correct else 0)
-    context.user_data["wrong"] = context.user_data.get("wrong", 0) + (0 if is_correct else 1)
-    context.user_data["answered"] = True
+    # Обработка выбора изображения (без изменений)
+    data = query.data.split('_')
+    choice = int(data[1])
+    is_correct = int(data[2])
+    user_id = query.from_user.id
 
     # Удаляем кнопки с предыдущих изображений
     for msg_id in context.user_data.get("messages", []):
@@ -313,13 +301,27 @@ async def button(update: Update, context):
             await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
         except Exception as e:
             if "Message is not modified" not in str(e):
-                logger.warning(f"Error removing buttons: {e}")
+                logger.warning(f"Error while deleting buttons: {e}")
 
-    await query.message.reply_text(f"You selected option {choice}: {'✅ Right!' if is_correct else '❌ Wrong!'}")
+    # Отменяем таймер, если он был запущен
+    if "timer_task" in context.user_data and not context.user_data["timer_task"].done():
+        context.user_data["timer_task"].cancel()
+        del context.user_data["timer_task"]
 
-    # Следующая пара изображений
+    # Сохраняем выбор пользователя
+    save_to_firebase(user_id, choice, is_correct, context.user_data["current_image_urls"][choice - 1])
+
+    context.user_data["rounds"] += 1
+    context.user_data["correct"] += 1 if is_correct else 0
+    context.user_data["wrong"] += 0 if is_correct else 1
+
+    response_text = f"You have selected the option {choice}: {'✅ Right!' if is_correct else '❌ Wrong!'}"
+    await query.message.reply_text(response_text)
+
+    context.user_data["answered"] = True
+
+    # Отправляем следующую пару изображений
     await send_images(chat_id, context)
-    
 
 async def remove_buttons_after_timeout(chat_id, context: CallbackContext, message_ids):
     await asyncio.sleep(15)
