@@ -318,17 +318,54 @@ async def button(update: Update, context: CallbackContext) -> None:
     await send_images(chat_id, context)
 
 async def remove_buttons_after_timeout(chat_id, context: CallbackContext, message_ids):
-    await asyncio.sleep(15)
+    # Отправляем сообщение с таймером
+    timer_msg = await context.bot.send_message(chat_id, "⏳ Time left: 15 sec")
+    context.user_data["timer_msg_id"] = timer_msg.message_id
 
-    # Если пользователь уже ответил, не удаляем кнопки
+    for seconds_left in range(14, 0, -1):
+        await asyncio.sleep(1)
+
+        # Если пользователь уже ответил — удаляем таймер и выходим
+        if context.user_data.get("answered", False):
+            try:
+                await context.bot.delete_message(chat_id, timer_msg.message_id)
+            except Exception:
+                pass
+            return
+
+        # Обновляем таймер
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=timer_msg.message_id,
+                text=f"⏳ Time left: {seconds_left} sec"
+            )
+        except Exception:
+            pass
+
+    # Время вышло
+    await asyncio.sleep(1)
+
     if context.user_data.get("answered", False):
+        try:
+            await context.bot.delete_message(chat_id, timer_msg.message_id)
+        except Exception:
+            pass
         return
+
+    # Удаляем таймер и кнопки
+    try:
+        await context.bot.delete_message(chat_id, timer_msg.message_id)
+    except Exception:
+        pass
 
     for msg_id in message_ids:
         try:
-            await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
+            await context.bot.edit_message_reply_markup(
+                chat_id=chat_id, message_id=msg_id, reply_markup=None
+            )
         except Exception as e:
-            if "Message is not modified" not in str(e):  # Игнорируем ошибку, если кнопок уже нет
+            if "Message is not modified" not in str(e):
                 logger.warning(f"Ошибка при удалении кнопок: {e}")
 
     await context.bot.send_message(chat_id, "⏳ 15 seconds have expired, answer not counted.")
