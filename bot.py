@@ -247,81 +247,79 @@ async def button(update: Update, context: CallbackContext) -> None:
     user_id = query.from_user.id
     await query.answer()
 
-    # Удаляем кнопки из сообщения, на которое нажали (например, "Начать тест" или "Продолжить")
-    try:
-        await query.edit_message_reply_markup(reply_markup=None)
-    except Exception as e:
-        if "Message is not modified" not in str(e):
-            logger.warning(f"Не удалось удалить reply_markup: {e}")
-
-    if query.data in ["start_game", "continue_game"]:
-        ref = db.reference(f"user_progress/{user_id}")
-        progress = ref.get() or {"completed_sheets": []}
-
-        max_sheets = 3  # Установи лимит листов
-        if len(progress["completed_sheets"]) >= max_sheets:
-            await show_results(chat_id, context)
-            return
-
-        # Определяем следующий номер листа (начиная с 0)
-        sheet_number = len(progress["completed_sheets"])  # 0, 1, 2
-        sheet_name = str(sheet_number).zfill(3)  # "000", "001", "002"
-
-        if sheet_name not in progress["completed_sheets"]:
-            progress["completed_sheets"].append(sheet_name)
-            ref.set(progress)
-
-        # Загружаем данные для текущего листа
-        images = get_images_from_google_sheets(user_id, sheet_number)
-
-        # Проверяем, вернул ли Apps Script сообщение о завершении
-        if isinstance(images, dict) and "message" in images:
-            await show_results(chat_id, context)
-            return
-
-        # Сбрасываем данные пользователя для нового листа
-        context.user_data["rounds"] = 0
-        context.user_data["correct"] = 0
-        context.user_data["wrong"] = 0
-        context.user_data["used_images"] = set()
-        context.user_data["current_images"] = images
-        await context.bot.send_message(chat_id, f"Let's start the set {sheet_name}")  # Отладка
-        await send_images(chat_id, context)
+    # Защита от двойного нажатия
+    if context.user_data.get("processing", False):
         return
+    context.user_data["processing"] = True
 
-    # Обработка выбора изображения (без изменений)
-    data = query.data.split('_')
-    choice = int(data[1])
-    is_correct = int(data[2])
-    user_id = query.from_user.id
-
-    # Удаляем кнопки с предыдущих изображений
-    for msg_id in context.user_data.get("messages", []):
+    try:
+        # Удаляем кнопки из сообщения, на которое нажали
         try:
-            await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
+            await query.edit_message_reply_markup(reply_markup=None)
         except Exception as e:
             if "Message is not modified" not in str(e):
-                logger.warning(f"Error while deleting buttons: {e}")
+                logger.warning(f"Не удалось удалить reply_markup: {e}")
 
-    # Отменяем таймер, если он был запущен
-    if "timer_task" in context.user_data and not context.user_data["timer_task"].done():
-        context.user_data["timer_task"].cancel()
-        del context.user_data["timer_task"]
+        if query.data in ["start_game", "continue_game"]:
+            ref = db.reference(f"user_progress/{user_id}")
+            progress = ref.get() or {"completed_sheets": []}
+            max_sheets = 3
+            if len(progress["completed_sheets"]) >= max_sheets:
+                await show_results(chat_id, context)
+                return
 
-    # Сохраняем выбор пользователя
-    save_to_firebase(user_id, choice, is_correct, context.user_data["current_image_urls"][choice - 1])
+            sheet_number = len(progress["completed_sheets"])
+            sheet_name = str(sheet_number).zfill(3)
 
-    context.user_data["rounds"] += 1
-    context.user_data["correct"] += 1 if is_correct else 0
-    context.user_data["wrong"] += 0 if is_correct else 1
+            if sheet_name not in progress["completed_sheets"]:
+                progress["completed_sheets"].append(sheet_name)
+                ref.set(progress)
 
-    response_text = f"You have selected the option {choice}: {'✅ Right!' if is_correct else '❌ Wrong!'}"
-    await query.message.reply_text(response_text)
+            images = get_images_from_google_sheets(user_id, sheet_number)
 
-    context.user_data["answered"] = True
+            if isinstance(images, dict) and "message" in images:
+                await show_results(chat_id, context)
+                return
 
-    # Отправляем следующую пару изображений
-    await send_images(chat_id, context)
+            context.user_data["rounds"] = 0
+            context.user_data["correct"] = 0
+            context.user_data["wrong"] = 0
+            context.user_data["used_images"] = set()
+            context.user_data["current_images"] = images
+            await context.bot.send_message(chat_id, f"Let's start the set {sheet_name}")
+            await send_images(chat_id, context)
+            return
+
+        data = query.data.split('_')
+        choice = int(data[1])
+        is_correct = int(data[2])
+        user_id = query.from_user.id
+
+        for msg_id in context.user_data.get("messages", []):
+            try:
+                await context.bot.edit_message_reply_markup(chat_id=chat_id, message_id=msg_id, reply_markup=None)
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    logger.warning(f"Error while deleting buttons: {e}")
+
+        if "timer_task" in context.user_data and not context.user_data["timer_task"].done():
+            context.user_data["timer_task"].cancel()
+            del context.user_data["timer_task"]
+
+        save_to_firebase(user_id, choice, is_correct, context.user_data["current_image_urls"][choice - 1])
+
+        context.user_data["rounds"] += 1
+        context.user_data["correct"] += 1 if is_correct else 0
+        context.user_data["wrong"] += 0 if is_correct else 1
+
+        response_text = f"You have selected the option {choice}: {'✅ Right!' if is_correct else '❌ Wrong!'}"
+        await query.message.reply_text(response_text)
+
+        context.user_data["answered"] = True
+        await send_images(chat_id, context)
+
+    finally:
+        context.user_data["processing"] = False
 
 async def remove_buttons_after_timeout(chat_id, context: CallbackContext, message_ids):
     await asyncio.sleep(15)
